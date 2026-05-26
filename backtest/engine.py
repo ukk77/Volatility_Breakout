@@ -1,10 +1,19 @@
 import pandas as pd
+import sqlite3
+import sys
+from pathlib import Path
+
+_TRADING_ROOT = Path(__file__).resolve().parents[2]
+_RISK_BACKEND = _TRADING_ROOT / 'risk_calculator' / 'backend'
+if str(_RISK_BACKEND) not in sys.path:
+    sys.path.insert(0, str(_RISK_BACKEND))
 import numpy as np
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 from ..config import VolatilityBreakoutConfig
-from ..signals.generator import compute_indicators
+from ..signals.generator import compute_indicators, generate_signal, Action
+from ..position_sizing.sizer import shares_to_buy
 from .portfolio import Portfolio
 from .metrics import compute_all_metrics
 
@@ -24,6 +33,38 @@ class BacktestSummary:
     portfolio_equity: Optional[pd.Series] = None
     portfolio_metrics: Optional[Dict] = None
 
+
+def _load_sentiment_history(ticker: str) -> pd.DataFrame:
+    db_path = _TRADING_ROOT / 'sentiment_analysis' / 'backend' / 'sentiment_history.db'
+    if not db_path.exists():
+        return pd.DataFrame()
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            df = pd.read_sql_query(
+                'SELECT captured_at, overall_sentiment, confidence FROM sentiment_snapshots WHERE UPPER(ticker)=UPPER(?)',
+                conn, params=(ticker.upper(),))
+        if df.empty: return df
+        df['date'] = pd.to_datetime(df['captured_at']).dt.date
+        df = df.sort_values('date').drop_duplicates('date', keep='last')
+        return df.set_index('date')
+    except Exception:
+        return pd.DataFrame()
+
+def _load_risk_history(ticker: str) -> pd.DataFrame:
+    db_path = _TRADING_ROOT / 'risk_calculator' / 'backend' / 'risk_history.db'
+    if not db_path.exists():
+        return pd.DataFrame()
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            df = pd.read_sql_query(
+                'SELECT captured_at, composite_risk_score, risk_bucket, kelly_fraction_capped, suggested_stop_loss_pct FROM risk_snapshots WHERE UPPER(ticker)=UPPER(?)',
+                conn, params=(ticker.upper(),))
+        if df.empty: return df
+        df['date'] = pd.to_datetime(df['captured_at']).dt.date
+        df = df.sort_values('date').drop_duplicates('date', keep='last')
+        return df.set_index('date')
+    except Exception:
+        return pd.DataFrame()
 
 def _cash_hurdle_equity(
     equity: pd.Series,
@@ -52,6 +93,8 @@ def run_backtest(
     # Run each ticker independently
     for ticker, ohlc in ticker_ohlc.items():
         df = ohlc.copy()
+        sentiment_hist = _load_sentiment_history(ticker)
+        risk_hist = _load_risk_history(ticker)
         if start_date:
             df = df[df.index >= pd.Timestamp(start_date)]
         if end_date:
@@ -72,7 +115,12 @@ def run_backtest(
             curr = df.iloc[i]
             prev = df.iloc[i-1]
             date_str = curr.name.strftime("%Y-%m-%d") if isinstance(curr.name, pd.Timestamp) else str(curr.name)
+            date_obj = pd.to_datetime(curr.name).date()
             current_price = float(curr["Close"])
+            daily_volume = float(curr["Volume"])
+            
+            sent_today = sentiment_hist.loc[date_obj].to_dict() if not sentiment_hist.empty and date_obj in sentiment_hist.index else None
+            risk_today = risk_hist.loc[date_obj].to_dict() if not risk_hist.empty and date_obj in risk_hist.index else None
             
             # Accrue interest
             if cfg.backtest.model_cash_interest:
@@ -80,31 +128,39 @@ def run_backtest(
                 portfolio.cash += portfolio.cash * daily_rate
             
             if position == 0:
-                # Look for entry
-                squeeze_fired = bool(prev["squeeze_on"]) and not bool(curr["squeeze_on"])
-                breakout_up = current_price > float(curr["bb_upper"])
-                vol_surge = float(curr["Volume"]) > (float(curr["vol_sma"]) * cfg.breakout.volume_mult)
+                # Look for entry using generate_signal
+                sig_df = df.iloc[:i+1]
+                sig = generate_signal(ticker, sig_df, cfg, sentiment_data=sent_today, risk_data=risk_today)
                 
-                if squeeze_fired and breakout_up and vol_surge:
+                if sig.action == Action.BUY:
                     # Buy!
-                    shares_to_buy = int((portfolio.cash * (cfg.position_sizing.base_position_pct / 100.0)) / current_price)
-                    if portfolio.buy(ticker, shares_to_buy, current_price, date_str):
-                        position = 1
-                        stop_loss = float(curr["Low"])  # Stop at low of breakout candle
+                    kelly_val = float(risk_today.get("kelly_fraction_capped", 0.0)) if risk_today else None
+                    shares_to_alloc = shares_to_buy(
+                        sig=sig,
+                        portfolio_nav=portfolio.equity({ticker: current_price}),
+                        current_price=current_price,
+                        cfg=cfg,
+                        kelly_fraction=kelly_val,
+                        daily_volume=daily_volume
+                    )
+                    if shares_to_alloc > 0:
+                        exec_price = current_price * (1.0 + cfg.backtest.slippage)
+                        if portfolio.buy(ticker, shares_to_alloc, exec_price, date_str):
+                            position = 1
+                            stop_loss = sig.stop_loss
             elif position == 1:
                 shares = portfolio.shares_held(ticker)
                 # Look for exit
                 # 1. Stop loss hit
                 if float(curr["Low"]) <= stop_loss:
-                    exit_price = min(current_price, stop_loss)  # Slippage simplified
+                    exit_price = min(current_price, stop_loss) * (1.0 - cfg.backtest.slippage)
                     portfolio.sell(ticker, shares, exit_price, date_str)
                     position = 0
                 # 2. Trailing EMA exit
                 elif current_price < float(curr["ema_exit"]):
-                    portfolio.sell(ticker, shares, current_price, date_str)
+                    exit_price = current_price * (1.0 - cfg.backtest.slippage)
+                    portfolio.sell(ticker, shares, exit_price, date_str)
                     position = 0
-                else:
-                    pass
                     
             # Record equity
             portfolio.record_equity(date_str, {ticker: current_price} if position == 1 else {})

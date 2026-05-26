@@ -5,6 +5,7 @@ from app.services.market_data import fetch_ohlcv
 from . import db as paper_db
 from ..config import VolatilityBreakoutConfig
 from ..signals.generator import generate_signal, compute_indicators, Action
+from ..position_sizing.sizer import shares_to_buy
 
 log = logging.getLogger(__name__)
 

@@ -129,10 +129,46 @@ def cmd_positions(args) -> None:
     print()
 
 
+def cmd_signals(args) -> None:
+    """Print current BUY/SELL/HOLD signals."""
+    from app.services.market_data import fetch_ohlcv
+    from volatility_breakout.signals.generator import generate_signal
+
+    cfg = VolatilityBreakoutConfig()
+    tickers = [args.ticker.upper()] if args.ticker else cfg.tickers
+
+    print(f"\nScanning Volatility Breakout Signals")
+    print("-" * 100)
+    print(f"{'TICKER':<8} {'ACTION':<6} {'PRICE':>9} {'STOP':>9} {'REASON'}")
+    print("-" * 100)
+
+    for ticker in tickers:
+        try:
+            ohlc = fetch_ohlcv(ticker, cfg.lookback_days)
+            sig = generate_signal(ticker, ohlc, cfg)
+            
+            color_code = ""
+            if sig.action == "BUY":
+                color_code = "\033[92m"  # Green
+            elif sig.action == "SELL":
+                color_code = "\033[91m"  # Red
+            
+            end_color = "\033[0m" if color_code else ""
+            
+            print(f"{color_code}{sig.ticker:<8} {sig.action.name:<6} "
+                  f"{sig.price:>9.2f} {sig.stop_loss:>9.2f} {sig.reason}{end_color}")
+        except Exception as e:
+            print(f"{ticker:<8} ERROR  {str(e)}")
+    print()
+
 def main():
     parser = argparse.ArgumentParser(description="Volatility Breakout strategy")
     subs = parser.add_subparsers(dest="command", required=True)
     
+    p_sig = subs.add_parser("signals", help="Show current signals")
+    p_sig.add_argument("--ticker", help="Single ticker")
+    p_sig.set_defaults(func=cmd_signals)
+
     p_bt = subs.add_parser("backtest", help="Run backtest")
     p_bt.add_argument("--ticker", help="Single ticker")
     p_bt.add_argument("--start", help="Start date")

@@ -26,6 +26,38 @@ class ExitConfig:
 
 
 @dataclass
+class ADXConfig:
+    """Trend strength filter."""
+    enabled: bool = True
+    period: int = 14
+    min_adx: float = 20.0  # Only take breakouts if trend is strong enough
+
+@dataclass
+class VolatilityRegimeConfig:
+    """Volatility regime — scale down position size in high-vol periods."""
+    enabled: bool = True
+    period: int = 30
+    low_vol_threshold: float = 0.15
+    high_vol_threshold: float = 0.30
+    min_multiplier: float = 0.25
+
+@dataclass
+class SignalConfig:
+    """Signal generation settings."""
+    sentiment_filter_enabled: bool = True
+    min_sentiment_confidence: float = 0.4
+    block_on_negative_sentiment: bool = True
+    risk_filter_enabled: bool = True
+    max_risk_score: float = 75.0
+
+@dataclass
+class PortfolioConstraintsConfig:
+    max_open_positions: int = 10
+    max_sector_exposure_pct: float = 40.0
+    max_gross_exposure_pct: float = 100.0
+    adv_participation_pct: float = 2.5
+
+@dataclass
 class PositionSizingConfig:
     """Position sizing parameters."""
     base_position_pct: float = 80.0
@@ -36,6 +68,9 @@ class PositionSizingConfig:
 class BacktestConfig:
     """Backtest engine settings."""
     initial_capital: float = 100_000.0
+    commission_per_trade: float = 0.0
+    commission_pct: float = 0.001
+    slippage: float = 0.0005
     benchmark_ticker: str = "SPY"
     abs_return_hurdle: float = 0.03
     model_cash_interest: bool = True
@@ -47,8 +82,19 @@ class VolatilityBreakoutConfig:
     squeeze: SqueezeConfig = field(default_factory=SqueezeConfig)
     breakout: BreakoutConfig = field(default_factory=BreakoutConfig)
     exits: ExitConfig = field(default_factory=ExitConfig)
+    adx: ADXConfig = field(default_factory=ADXConfig)
+    vol_regime: VolatilityRegimeConfig = field(default_factory=VolatilityRegimeConfig)
+    signal: SignalConfig = field(default_factory=SignalConfig)
+    portfolio_constraints: PortfolioConstraintsConfig = field(default_factory=PortfolioConstraintsConfig)
     position_sizing: PositionSizingConfig = field(default_factory=PositionSizingConfig)
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
+
+    sector_map: Dict[str, str] = field(default_factory=lambda: {
+        "NVDA": "Technology", "AMD": "Technology", "META": "Technology", "NFLX": "Technology",
+        "AVGO": "Technology", "QQQ": "Technology", "TSLA": "Consumer Discretionary",
+        "COIN": "Financials", "MSTR": "Technology", "PLTR": "Technology", "UBER": "Industrials",
+        "SPY": "Diversified"
+    })
 
     tickers: List[str] = field(default_factory=lambda: [
         "NVDA", "TSLA", "AMD", "META", "NFLX",

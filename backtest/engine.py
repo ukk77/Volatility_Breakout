@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from ..config import VolatilityBreakoutConfig
 from ..signals.generator import compute_indicators, generate_signal, Action
 from ..position_sizing.sizer import shares_to_buy
-from .portfolio import Portfolio
-from .metrics import compute_all_metrics
+from trading_core import Portfolio
+from trading_core import compute_all_metrics
 
 
 @dataclass
@@ -130,7 +130,7 @@ def run_backtest(
             if position == 0:
                 # Look for entry using generate_signal
                 sig_df = df.iloc[:i+1]
-                sig = generate_signal(ticker, sig_df, cfg, sentiment_data=sent_today, risk_data=risk_today)
+                sig = generate_signal(ticker, sig_df, cfg, sentiment_data=sent_today, risk_data=risk_today, precomputed_df=sig_df)
                 
                 if sig.action == Action.BUY:
                     # Buy!
@@ -229,3 +229,15 @@ def run_backtest(
         )
         
     return summary
+
+
+def run_portfolio_backtest(
+    cfg: VolatilityBreakoutConfig,
+    ticker_ohlc: Dict[str, pd.DataFrame],
+    benchmark_ohlc: Dict[str, pd.DataFrame],
+    rf_annual: float = 0.04,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> BacktestSummary:
+    """Run a full portfolio-level backtest aggregating across all tickers."""
+    return run_backtest(cfg, ticker_ohlc, benchmark_ohlc, rf_annual, start_date, end_date)

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
-import sqlite3
+import os
+import requests
 import sys
 from pathlib import Path
 from dataclasses import dataclass
@@ -10,41 +11,29 @@ from ..config import VolatilityBreakoutConfig
 from ..indicators import ADX, VolatilityRegime
 from .filters import apply_vb_filters
 
-_TRADING_ROOT = Path(__file__).resolve().parents[3]
-_SENTIMENT_DB = _TRADING_ROOT / "sentiment_analysis" / "backend" / "sentiment_history.db"
-_RISK_DB = _TRADING_ROOT / "risk_calculator" / "backend" / "risk_history.db"
-
 def _fetch_latest_sentiment(ticker: str) -> Optional[dict]:
-    if not _SENTIMENT_DB.exists():
-        return None
+    url = os.getenv("SENTIMENT_API_URL", "http://localhost:8000")
     try:
-        with sqlite3.connect(str(_SENTIMENT_DB)) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                "SELECT overall_sentiment, confidence, avg_sentiment "
-                "FROM sentiment_snapshots "
-                "WHERE UPPER(ticker)=UPPER(?) ORDER BY captured_at DESC LIMIT 1",
-                (ticker.upper(),),
-            ).fetchone()
-        return dict(row) if row else None
+        resp = requests.get(f"{url}/api/history/{ticker}?limit=1", timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("snapshots") and len(data["snapshots"]) > 0:
+                return data["snapshots"][0]
     except Exception:
-        return None
+        pass
+    return None
 
 def _fetch_latest_risk(ticker: str) -> Optional[dict]:
-    if not _RISK_DB.exists():
-        return None
+    url = os.getenv("RISK_API_URL", "http://localhost:8100")
     try:
-        with sqlite3.connect(str(_RISK_DB)) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                "SELECT composite_risk_score, risk_bucket, overall_sentiment, upstream_confidence, kelly_fraction_capped, suggested_stop_loss_pct "
-                "FROM risk_snapshots "
-                "WHERE UPPER(ticker)=UPPER(?) ORDER BY captured_at DESC LIMIT 1",
-                (ticker.upper(),),
-            ).fetchone()
-        return dict(row) if row else None
+        resp = requests.get(f"{url}/api/history/{ticker}?limit=1", timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("snapshots") and len(data["snapshots"]) > 0:
+                return data["snapshots"][0]
     except Exception:
-        return None
+        pass
+    return None
 
 
 
@@ -97,6 +86,26 @@ def compute_indicators(ohlc: pd.DataFrame, cfg: VolatilityBreakoutConfig) -> pd.
     # Fast EMA for exits
     df["ema_exit"] = df["Close"].ewm(span=cfg.exits.trailing_ema_length, adjust=False).mean()
 
+    # P2: VWAP Confirmation (20-period MVWAP)
+    df["typical_price"] = (df["High"] + df["Low"] + df["Close"]) / 3
+    df["mvwap"] = (df["typical_price"] * df["Volume"]).rolling(length).sum() / df["Volume"].rolling(length).sum()
+
+    # P3: Donchian Channel — rolling high/low
+    dc_period = cfg.breakout.donchian_period
+    df["donchian_high"] = df["High"].rolling(dc_period).max()
+    df["donchian_low"] = df["Low"].rolling(dc_period).min()
+
+    # P3: Anchored VWAP — VWAP reset to start of each squeeze episode
+    squeeze_starts = df["squeeze_on"] & (~df["squeeze_on"].shift(1).fillna(False))
+    df["squeeze_episode"] = squeeze_starts.cumsum()
+    df.loc[~df["squeeze_on"], "squeeze_episode"] = np.nan
+    anchored_vwap = pd.Series(np.nan, index=df.index)
+    for ep_id, grp in df.dropna(subset=["squeeze_episode"]).groupby("squeeze_episode"):
+        cum_tpv = (grp["typical_price"] * grp["Volume"]).cumsum()
+        cum_vol = grp["Volume"].cumsum().replace(0, np.nan)
+        anchored_vwap.loc[grp.index] = cum_tpv / cum_vol
+    df["anchored_vwap"] = anchored_vwap.ffill()
+
     # Trend Strength (ADX)
     if cfg.adx.enabled:
         adx_ind = ADX(period=cfg.adx.period)
@@ -113,11 +122,11 @@ def compute_indicators(ohlc: pd.DataFrame, cfg: VolatilityBreakoutConfig) -> pd.
         
     return df
 
-def generate_signal(ticker: str, ohlc: pd.DataFrame, cfg: VolatilityBreakoutConfig, sentiment_override: Optional[float] = None, sentiment_data: Optional[Dict] = None, risk_data: Optional[Dict] = None) -> Signal:
+def generate_signal(ticker: str, ohlc: pd.DataFrame, cfg: VolatilityBreakoutConfig, sentiment_override: Optional[float] = None, sentiment_data: Optional[Dict] = None, risk_data: Optional[Dict] = None, precomputed_df: Optional[pd.DataFrame] = None) -> Signal:
     if len(ohlc) < max(cfg.squeeze.length, cfg.breakout.volume_length) + 1:
         return Signal(ticker, "", Action.HOLD, 0.0, 0.0, "Not enough data")
-        
-    df = compute_indicators(ohlc, cfg)
+
+    df = precomputed_df if precomputed_df is not None else compute_indicators(ohlc, cfg)
     
     last = df.iloc[-1]
     prev = df.iloc[-2]
@@ -130,6 +139,22 @@ def generate_signal(ticker: str, ohlc: pd.DataFrame, cfg: VolatilityBreakoutConf
     
     # 2. Price closes above Upper BB
     breakout_up = float(last["Close"]) > float(last["bb_upper"])
+    
+    # P2: Expansion confirmation (must close outside Keltner)
+    if getattr(cfg.breakout, 'expansion_confirm', False):
+        breakout_up = breakout_up and (float(last["Close"]) > float(last["kc_upper"]))
+
+    # P2: VWAP confirmation (must close above institutional average)
+    if getattr(cfg.breakout, 'vwap_filter', False):
+        breakout_up = breakout_up and (float(last["Close"]) > float(last["mvwap"]))
+
+    # P3: Donchian Channel — must close at or above 20-day high
+    if getattr(cfg.breakout, 'use_donchian', False) and pd.notna(last["donchian_high"]):
+        breakout_up = breakout_up and (float(last["Close"]) >= float(last["donchian_high"]))
+
+    # P3: Anchored VWAP — must close above VWAP anchored to squeeze start
+    if getattr(cfg.breakout, 'use_anchored_vwap', False) and pd.notna(last["anchored_vwap"]):
+        breakout_up = breakout_up and (float(last["Close"]) > float(last["anchored_vwap"]))
     
     # 3. Volume surge
     vol_surge = float(last["Volume"]) > (float(last["vol_sma"]) * cfg.breakout.volume_mult)

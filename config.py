@@ -17,6 +17,11 @@ class BreakoutConfig:
     enabled: bool = True
     volume_mult: float = 1.5
     volume_length: int = 20
+    vwap_filter: bool = True          # P2: VWAP Confirmation (rolling MVWAP)
+    expansion_confirm: bool = True    # P2: Must close outside Keltner Channel
+    use_donchian: bool = False        # P3: Price must close above Donchian 20-day high (opt-in)
+    donchian_period: int = 20         # Lookback for Donchian channel
+    use_anchored_vwap: bool = False   # P3: Price must close above VWAP anchored to squeeze start (opt-in)
 
 
 @dataclass

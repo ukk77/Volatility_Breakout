@@ -98,13 +98,15 @@ class VolatilityBreakoutConfig:
         "NVDA": "Technology", "AMD": "Technology", "META": "Technology", "NFLX": "Technology",
         "AVGO": "Technology", "QQQ": "Technology", "TSLA": "Consumer Discretionary",
         "COIN": "Financials", "MSTR": "Technology", "PLTR": "Technology", "UBER": "Industrials",
-        "SPY": "Diversified"
+        "SPY": "Diversified",
+        "MU": "Technology", "LITE": "Technology", "NVTS": "Technology", "ASML": "Technology"
     })
 
     tickers: List[str] = field(default_factory=lambda: [
         "NVDA", "TSLA", "AMD", "META", "NFLX",
         "COIN", "MSTR", "PLTR", "UBER", "AVGO",
-        "QQQ", "SPY"
+        "QQQ", "SPY",
+        "MU", "LITE", "NVTS", "ASML"
     ])
     
     lookback_days: int = 7300

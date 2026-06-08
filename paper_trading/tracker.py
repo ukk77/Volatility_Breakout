@@ -15,12 +15,14 @@ def run_paper_trading(cfg: VolatilityBreakoutConfig):
     
     if paper_db.has_run_today(today_str):
         log.info(f"Paper trading already run for {today_str}. Skipping.")
-        return
+        return []
         
     positions = paper_db.get_positions()
     pos_map = {p["ticker"]: p for p in positions}
     
     log.info(f"Starting VB paper trading run for {today_str}. Checking {len(cfg.tickers)} tickers.")
+    
+    actions = []
     
     for ticker in cfg.tickers:
         try:
@@ -48,6 +50,7 @@ def run_paper_trading(cfg: VolatilityBreakoutConfig):
                     
                     cash = paper_db.get_cash_balance()
                     paper_db.update_cash_balance(cash + (pos["shares"] * exit_price))
+                    actions.append({"action_taken": "SELL", "ticker": ticker, "shares": pos["shares"]})
                     continue
                     
                 # Check Trailing EMA Stop
@@ -58,6 +61,7 @@ def run_paper_trading(cfg: VolatilityBreakoutConfig):
                     
                     cash = paper_db.get_cash_balance()
                     paper_db.update_cash_balance(cash + (pos["shares"] * current_price))
+                    actions.append({"action_taken": "SELL", "ticker": ticker, "shares": pos["shares"]})
                     continue
 
             # 2. Look for Entries
@@ -74,9 +78,11 @@ def run_paper_trading(cfg: VolatilityBreakoutConfig):
                         paper_db.upsert_position(ticker, shares, sig.price, sig.stop_loss, today_str)
                         paper_db.log_trade(today_str, ticker, "BUY", shares, sig.price, sig.reason)
                         log.info(f"[{ticker}] BREAKOUT! Bought {shares} shares @ {sig.price:.2f}. Stop: {sig.stop_loss:.2f}")
+                        actions.append({"action_taken": "BUY", "ticker": ticker, "shares": shares})
                         
         except Exception as e:
             log.error(f"[{ticker}] Paper trading error: {e}")
             
     paper_db.mark_run_today(today_str)
     log.info("VB Paper trading run complete.")
+    return actions

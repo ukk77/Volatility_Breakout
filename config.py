@@ -95,18 +95,25 @@ class VolatilityBreakoutConfig:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
 
     sector_map: Dict[str, str] = field(default_factory=lambda: {
+        "EQT": "Energy",
+        "GEV": "Industrials",
+        "VST": "Utilities",
         "NVDA": "Technology", "AMD": "Technology", "META": "Technology", "NFLX": "Technology",
         "AVGO": "Technology", "QQQ": "Technology", "TSLA": "Consumer Discretionary",
         "COIN": "Financials", "MSTR": "Technology", "PLTR": "Technology", "UBER": "Industrials",
         "SPY": "Diversified",
-        "MU": "Technology", "LITE": "Technology", "NVTS": "Technology", "ASML": "Technology"
+        "MU": "Technology", "LITE": "Technology", "NVTS": "Technology", "ASML": "Technology",
+        "FCX": "Materials", "GE": "Industrials", "LMT": "Industrials", "RTX": "Industrials",
+        "NUE": "Materials", "SMCI": "Technology", "MARA": "Financials"
     })
 
     tickers: List[str] = field(default_factory=lambda: [
         "NVDA", "TSLA", "AMD", "META", "NFLX",
         "COIN", "MSTR", "PLTR", "UBER", "AVGO",
         "QQQ", "SPY",
-        "MU", "LITE", "NVTS", "ASML"
+        "MU", "LITE", "NVTS", "ASML",
+        "FCX", "GE", "LMT", "RTX", "NUE",
+        "SMCI", "MARA"
     ])
     
     lookback_days: int = 7300

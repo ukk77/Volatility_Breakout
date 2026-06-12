@@ -98,6 +98,10 @@ class VolatilityBreakoutConfig:
         "EQT": "Energy",
         "GEV": "Industrials",
         "VST": "Utilities",
+        "MP": "Materials",
+        "UUUU": "Materials",
+        "USAR": "Materials",
+        "NB": "Materials",
         "NVDA": "Technology", "AMD": "Technology", "META": "Technology", "NFLX": "Technology",
         "AVGO": "Technology", "QQQ": "Technology", "TSLA": "Consumer Discretionary",
         "COIN": "Financials", "MSTR": "Technology", "PLTR": "Technology", "UBER": "Industrials",
@@ -108,6 +112,7 @@ class VolatilityBreakoutConfig:
     })
 
     tickers: List[str] = field(default_factory=lambda: [
+        'VST', 'GEV', 'EQT', 'MP', 'UUUU', 'USAR', 'NB',
         "NVDA", "TSLA", "AMD", "META", "NFLX",
         "COIN", "MSTR", "PLTR", "UBER", "AVGO",
         "QQQ", "SPY",

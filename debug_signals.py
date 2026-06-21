@@ -1,6 +1,13 @@
+import os
 import sys
-sys.path.insert(0, r"c:\Users\ukard\OneDrive\Desktop\trading")
-sys.path.insert(0, r"c:\Users\ukard\OneDrive\Desktop\trading\risk_calculator\backend")
+from pathlib import Path
+
+_TRADING_ROOT = Path(__file__).resolve().parents[1]
+_RISK_BACKEND = Path(os.getenv("RISK_CALCULATOR_BACKEND", str(_TRADING_ROOT / "risk_calculator" / "backend")))
+if str(_TRADING_ROOT) not in sys.path:
+    sys.path.insert(0, str(_TRADING_ROOT))
+if str(_RISK_BACKEND) not in sys.path:
+    sys.path.insert(0, str(_RISK_BACKEND))
 
 from app.services.market_data import fetch_ohlcv
 from volatility_breakout.config import VolatilityBreakoutConfig

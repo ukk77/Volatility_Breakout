@@ -95,30 +95,33 @@ class VolatilityBreakoutConfig:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
 
     sector_map: Dict[str, str] = field(default_factory=lambda: {
-        "EQT": "Energy",
-        "GEV": "Industrials",
-        "VST": "Utilities",
-        "MP": "Materials",
-        "UUUU": "Materials",
-        "USAR": "Materials",
-        "NB": "Materials",
-        "NVDA": "Technology", "AMD": "Technology", "META": "Technology", "NFLX": "Technology",
-        "AVGO": "Technology", "QQQ": "Technology", "TSLA": "Consumer Discretionary",
-        "COIN": "Financials", "MSTR": "Technology", "PLTR": "Technology", "UBER": "Industrials",
-        "SPY": "Diversified",
+        # Rare earths / critical minerals
+        "USAR": "Materials", "NB": "Materials",
+        # High-beta Technology
+        "AMD": "Technology", "NFLX": "Technology", "AVGO": "Technology",
         "MU": "Technology", "LITE": "Technology", "NVTS": "Technology", "ASML": "Technology",
-        "FCX": "Materials", "GE": "Industrials", "LMT": "Industrials", "RTX": "Industrials",
-        "NUE": "Materials", "SMCI": "Technology", "MARA": "Financials"
+        "SMCI": "Technology",
+        # Crypto-adjacent / speculative
+        "COIN": "Financials", "MSTR": "Technology", "MARA": "Financials",
+        # High-growth software/platform
+        "PLTR": "Technology", "UBER": "Industrials",
+        # Industrials / Materials
+        "FCX": "Materials", "GE": "Industrials", "LMT": "Industrials",
+        "RTX": "Industrials", "NUE": "Materials",
     })
 
     tickers: List[str] = field(default_factory=lambda: [
-        'VST', 'GEV', 'EQT', 'MP', 'UUUU', 'USAR', 'NB',
-        "NVDA", "TSLA", "AMD", "META", "NFLX",
-        "COIN", "MSTR", "PLTR", "UBER", "AVGO",
-        "QQQ", "SPY",
-        "MU", "LITE", "NVTS", "ASML",
+        # Rare earths / critical minerals — explosive movers
+        "USAR", "NB",
+        # High-beta Technology
+        "AMD", "NFLX", "AVGO",
+        "MU", "LITE", "NVTS", "ASML", "SMCI",
+        # Crypto-adjacent / speculative
+        "COIN", "MSTR", "PLTR", "MARA",
+        # High-growth platform
+        "UBER",
+        # Industrials / Materials — cyclical breakouts
         "FCX", "GE", "LMT", "RTX", "NUE",
-        "SMCI", "MARA"
     ])
     
     lookback_days: int = 7300

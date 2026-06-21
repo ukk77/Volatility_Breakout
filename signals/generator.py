@@ -11,6 +11,17 @@ from ..config import VolatilityBreakoutConfig
 from ..indicators import ADX, VolatilityRegime
 from .filters import apply_vb_filters
 
+try:
+    from app.services.session_context import (
+        fetch_premarket_gap,
+        premarket_confirmation_mult,
+        early_session_size_scalar,
+    )
+except ImportError:
+    def fetch_premarket_gap(ticker): return None  # type: ignore
+    def premarket_confirmation_mult(gap, direction, **kw): return 1.0  # type: ignore
+    def early_session_size_scalar(**kw): return 1.0  # type: ignore
+
 def _fetch_latest_sentiment(ticker: str) -> Optional[dict]:
     url = os.getenv("SENTIMENT_API_URL", "http://localhost:8000")
     try:
@@ -178,7 +189,7 @@ def generate_signal(ticker: str, ohlc: pd.DataFrame, cfg: VolatilityBreakoutConf
         # Buy! Stop loss is the low of the breakout candle
         stop_loss = float(last["Low"])
         meta_str = " | ".join(meta.values())
-        
+
         sent_str = "neutral"
         if sentiment_override is not None:
             sent_str = "positive" if sentiment_override > 0 else ("negative" if sentiment_override < 0 else "neutral")
@@ -187,13 +198,27 @@ def generate_signal(ticker: str, ohlc: pd.DataFrame, cfg: VolatilityBreakoutConf
 
         kelly_val = float(risk_data.get("kelly_fraction_capped", 0.0)) if risk_data else None
 
+        pm_gap = fetch_premarket_gap(ticker)
+        pm_mult = premarket_confirmation_mult(pm_gap, "BUY")
+        es_scalar = early_session_size_scalar()
+        session_notes = []
+        if pm_gap is not None and abs(pm_gap) >= 0.005:
+            session_notes.append(f"pm_gap={pm_gap:+.1%}(x{pm_mult:.2f})")
+        if es_scalar < 1.0:
+            session_notes.append(f"early_session(x{es_scalar:.2f})")
+        if kelly_val is not None:
+            kelly_val = round(kelly_val * pm_mult * es_scalar, 4)
+        reason_str = f"Squeeze breakout up on {last['Volume']/last['vol_sma']:.1f}x volume | {meta_str}"
+        if session_notes:
+            reason_str += " | " + " | ".join(session_notes)
+
         return Signal(
             ticker=ticker,
             date=date_str,
             action=Action.BUY,
             price=price,
             stop_loss=stop_loss,
-            reason=f"Squeeze breakout up on {last['Volume']/last['vol_sma']:.1f}x volume | {meta_str}",
+            reason=reason_str,
             sentiment=sent_str,
             kelly_fraction=kelly_val
         )

@@ -19,10 +19,29 @@ def run_paper_trading(cfg: VolatilityBreakoutConfig):
         
     positions = paper_db.get_positions()
     pos_map = {p["ticker"]: p for p in positions}
-    
-    log.info(f"Starting VB paper trading run for {today_str}. Checking {len(cfg.tickers)} tickers.")
-    
+
+    # ── Close orphaned positions for tickers no longer in this strategy's universe ──
+    _universe = {t.upper() for t in cfg.tickers}
     actions = []
+    for _pos in positions:
+        if _pos["ticker"].upper() not in _universe:
+            log.warning(
+                "Orphaned position: %s (%d shares) is no longer in VB universe — closing.",
+                _pos["ticker"], _pos["shares"],
+            )
+            paper_db.log_trade(
+                today_str, _pos["ticker"], "SELL", _pos["shares"],
+                _pos["avg_cost"], "UNIVERSE_CHANGE",
+            )
+            paper_db.upsert_position(_pos["ticker"], 0, 0.0)
+            pos_map.pop(_pos["ticker"].upper(), None)
+            actions.append({
+                "ticker": _pos["ticker"], "signal": "SELL",
+                "action_taken": "SELL", "shares": _pos["shares"],
+                "price": _pos["avg_cost"], "pnl": 0.0, "reason": "UNIVERSE_CHANGE",
+            })
+
+    log.info(f"Starting VB paper trading run for {today_str}. Checking {len(cfg.tickers)} tickers.")
     
     for ticker in cfg.tickers:
         try:

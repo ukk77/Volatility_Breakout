@@ -38,6 +38,7 @@ def apply_vb_filters(
         elif sentiment_data is not None:
             overall_sentiment = sentiment_data.get("overall_sentiment")
             conf = float(sentiment_data.get("confidence") or 0.0)
+            contrarian_signal = sentiment_data.get("contrarian_signal")
             
             if conf < cfg.signal.min_sentiment_confidence:
                 reason = f"low_conf={conf:.2f}<{cfg.signal.min_sentiment_confidence}"
@@ -47,8 +48,16 @@ def apply_vb_filters(
                 reason = "blocked:negative_sentiment"
                 meta["sent"] = reason
                 return False, reason, meta
-            
-            meta["sent"] = f"sent={overall_sentiment}({conf:.2f})OK"
+            # Contrarian: extreme bullish is cautionary for breakout (may be exhausted)
+            elif contrarian_signal == "extreme_bullish_caution":
+                reason = "contrarian:extreme_bullish_caution"
+                meta["sent"] = reason
+                return False, reason, meta
+            # Contrarian: extreme bearish can be opportunity for breakout reversal
+            elif contrarian_signal == "extreme_bearish_opportunity":
+                meta["sent"] = f"sent={overall_sentiment}({conf:.2f})OK|contrarian=opp"
+            else:
+                meta["sent"] = f"sent={overall_sentiment}({conf:.2f})OK"
 
     # 3. Risk Filter
     if cfg.signal.risk_filter_enabled:

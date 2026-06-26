@@ -114,57 +114,15 @@ def cmd_backtest(args) -> None:
 
 
 def cmd_paper(args) -> None:
-    """[DEPRECATED] Use: python -m harness.cli signal_generation
-    Paper trading is now owned by the harness. This command is kept for dev/debug only.
-    """
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-    from volatility_breakout.paper_trading.tracker import run_paper_trading
-    
-    cfg = VolatilityBreakoutConfig()
-    run_paper_trading(cfg)
+    print("ERROR: Independent paper trading is disabled. Please use the unified harness: python -m harness.cli run")
+    import sys
+    sys.exit(1)
 
 
 def cmd_positions(args) -> None:
-    """[DEPRECATED] Use: python -m harness.cli positions
-    Positions are now tracked in harness_trades.db. This command shows VB-only legacy positions.
-    """
-    from app.services.market_data import fetch_ohlcv
-    from volatility_breakout.paper_trading import db as paper_db
-    
-    positions = paper_db.get_positions()
-    cash = paper_db.get_cash_balance()
-    
-    print(f"\nVolatility Breakout Paper Trading")
-    print(f"Cash Balance: ${cash:,.2f}")
-    print(f"Open Positions: {len(positions)}")
-    print("-" * 65)
-    
-    if not positions:
-        print("  (No open positions)")
-    else:
-        print(f"{'TICKER':<8} {'SHARES':>6} {'AVG_COST':>10} {'CUR_PRICE':>10} {'UNREAL_PNL':>12}")
-        print("-" * 65)
-        for p in positions:
-            try:
-                ohlc = fetch_ohlcv(p["ticker"], 5)
-                cur_price = float(ohlc["Close"].iloc[-1])
-            except Exception:
-                cur_price = p["avg_cost"]
-                
-            unreal_pnl = (cur_price - p["avg_cost"]) * p["shares"]
-            print(
-                f"{p['ticker']:<8} {p['shares']:>6} {p['avg_cost']:>10.2f} "
-                f"{cur_price:>10.2f} {unreal_pnl:>+12.2f}"
-            )
-            
-    print("\nRecent Trades:")
-    trades = paper_db.get_trades(limit=10)
-    if not trades:
-        print("  (No recent trades)")
-    else:
-        for t in trades:
-            print(f"  [{t['action']}] {t['ticker']:<5} {t['shares']} shares @ ${t['price']:.2f} ({t['executed_at']})")
-    print()
+    print("ERROR: Independent paper trading is disabled. Please use the unified harness: python -m harness.cli positions")
+    import sys
+    sys.exit(1)
 
 
 def main():

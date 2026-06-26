@@ -12,7 +12,7 @@ from ..indicators import ADX, VolatilityRegime
 from .filters import apply_vb_filters
 
 try:
-    from app.services.session_context import (
+    from trading_core.session_context import (
         fetch_premarket_gap,
         premarket_confirmation_mult,
         early_session_size_scalar,
@@ -22,6 +22,9 @@ except ImportError:
     def premarket_confirmation_mult(gap, direction, **kw): return 1.0  # type: ignore
     def early_session_size_scalar(**kw): return 1.0  # type: ignore
 
+import logging
+log = logging.getLogger(__name__)
+
 def _fetch_latest_sentiment(ticker: str) -> Optional[dict]:
     url = os.getenv("SENTIMENT_API_URL", "http://localhost:8000")
     try:
@@ -30,8 +33,10 @@ def _fetch_latest_sentiment(ticker: str) -> Optional[dict]:
             data = resp.json()
             if data.get("snapshots") and len(data["snapshots"]) > 0:
                 return data["snapshots"][0]
-    except Exception:
-        pass
+        else:
+            log.warning("fetch_sentiment %s returned status %s", ticker, resp.status_code)
+    except Exception as e:
+        log.warning("fetch_sentiment %s failed: %s", ticker, type(e).__name__)
     return None
 
 def _fetch_latest_risk(ticker: str) -> Optional[dict]:
@@ -42,8 +47,10 @@ def _fetch_latest_risk(ticker: str) -> Optional[dict]:
             data = resp.json()
             if data.get("snapshots") and len(data["snapshots"]) > 0:
                 return data["snapshots"][0]
-    except Exception:
-        pass
+        else:
+            log.warning("fetch_risk %s returned status %s", ticker, resp.status_code)
+    except Exception as e:
+        log.warning("fetch_risk %s failed: %s", ticker, type(e).__name__)
     return None
 
 

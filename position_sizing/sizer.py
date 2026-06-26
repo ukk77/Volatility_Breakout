@@ -27,9 +27,11 @@ def compute_position_dollars(
     # 3. Sentiment agreement multiplier
     if sig.sentiment is not None:
         if sig.sentiment == "positive":
-            pass # We only go LONG in this strategy, so positive is agreement
+            alloc_pct *= cfg.position_sizing.sentiment_agree_mult
         elif sig.sentiment == "negative":
-            alloc_pct *= 0.5
+            alloc_pct *= cfg.position_sizing.sentiment_disagree_mult
+        else:
+            alloc_pct *= cfg.position_sizing.sentiment_neutral_mult
             
     # Ensure bounds
     alloc_pct = min(alloc_pct, max_pct)

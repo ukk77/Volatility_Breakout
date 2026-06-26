@@ -67,6 +67,9 @@ class PositionSizingConfig:
     """Position sizing parameters."""
     base_position_pct: float = 80.0
     max_position_pct: float = 100.0
+    sentiment_agree_mult: float = 1.2
+    sentiment_disagree_mult: float = 0.5
+    sentiment_neutral_mult: float = 1.0
 
 
 @dataclass

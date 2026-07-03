@@ -44,6 +44,10 @@ def apply_vb_filters(
                 reason = f"low_conf={conf:.2f}<{cfg.signal.min_sentiment_confidence}"
                 meta["sent"] = reason
                 return False, reason, meta
+            # Contrarian: extreme bearish — must be checked BEFORE block_on_negative_sentiment
+            # because extreme bearish co-occurs with overall_sentiment == "negative".
+            elif contrarian_signal == "extreme_bearish_opportunity":
+                meta["sent"] = f"sent={overall_sentiment}({conf:.2f})OK|contrarian=opp"
             elif cfg.signal.block_on_negative_sentiment and overall_sentiment == "negative":
                 reason = "blocked:negative_sentiment"
                 meta["sent"] = reason
@@ -53,9 +57,6 @@ def apply_vb_filters(
                 reason = "contrarian:extreme_bullish_caution"
                 meta["sent"] = reason
                 return False, reason, meta
-            # Contrarian: extreme bearish can be opportunity for breakout reversal
-            elif contrarian_signal == "extreme_bearish_opportunity":
-                meta["sent"] = f"sent={overall_sentiment}({conf:.2f})OK|contrarian=opp"
             else:
                 meta["sent"] = f"sent={overall_sentiment}({conf:.2f})OK"
 

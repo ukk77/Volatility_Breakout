@@ -31,6 +31,14 @@ class ExitConfig:
 
 
 @dataclass
+class FalseBreakoutConfig:
+    """Post-entry filter to detect and exit failed breakouts early."""
+    enabled: bool = True
+    max_bars: int = 3            # Check within this many bars after entry
+    reversal_atr_mult: float = 1.0  # Exit if price drops > N * ATR from entry
+
+
+@dataclass
 class ADXConfig:
     """Trend strength filter."""
     enabled: bool = True
@@ -90,6 +98,7 @@ class VolatilityBreakoutConfig:
     squeeze: SqueezeConfig = field(default_factory=SqueezeConfig)
     breakout: BreakoutConfig = field(default_factory=BreakoutConfig)
     exits: ExitConfig = field(default_factory=ExitConfig)
+    false_breakout: FalseBreakoutConfig = field(default_factory=FalseBreakoutConfig)
     adx: ADXConfig = field(default_factory=ADXConfig)
     vol_regime: VolatilityRegimeConfig = field(default_factory=VolatilityRegimeConfig)
     signal: SignalConfig = field(default_factory=SignalConfig)

@@ -69,8 +69,13 @@ class Signal:
     price: float
     stop_loss: float
     reason: str
+    filtered_strength: float = 0.0
+    raw_strength: float = 0.0
     sentiment: Optional[str] = None
     kelly_fraction: Optional[float] = None
+    adx_value: Optional[float] = None
+    volume_ratio: Optional[float] = None
+    vol_regime_mult: Optional[float] = None
 
 
 def compute_indicators(ohlc: pd.DataFrame, cfg: VolatilityBreakoutConfig) -> pd.DataFrame:
@@ -219,6 +224,31 @@ def generate_signal(ticker: str, ohlc: pd.DataFrame, cfg: VolatilityBreakoutConf
         if session_notes:
             reason_str += " | " + " | ".join(session_notes)
 
+        # ── Compute signal strength ────────────────────────────────────────────
+        # Base: volume surge ratio normalised (1.5x=0.5, 3x=1.0)
+        vol_surge_ratio = float(last["Volume"]) / float(last["vol_sma"])
+        vol_component = min((vol_surge_ratio - 1.0) / 2.0, 1.0)  # 0.0 at 1x, 1.0 at 3x
+
+        # ADX component: stronger trend = better breakout (0.5 at min_adx, 1.0 at 2*min_adx)
+        adx_component = min(adx_val / (2.0 * cfg.adx.min_adx), 1.0) if (cfg.adx.enabled and adx_val is not None) else 0.7
+
+        # Sentiment multiplier
+        sent_mult = 1.0
+        if sent_str == "positive":
+            sent_mult = cfg.position_sizing.sentiment_agree_mult
+        elif sent_str == "negative":
+            sent_mult = cfg.position_sizing.sentiment_disagree_mult
+        else:
+            sent_mult = cfg.position_sizing.sentiment_neutral_mult
+
+        # Vol regime multiplier
+        vr_mult = 1.0
+        if cfg.vol_regime.enabled and pd.notna(last.get("vol_regime", np.nan)):
+            vr_mult = float(last["vol_regime"]) if float(last["vol_regime"]) > 0 else 1.0
+
+        raw_str = vol_component * adx_component * sent_mult * vr_mult * pm_mult * es_scalar
+        strength = min(raw_str, 1.0)
+
         return Signal(
             ticker=ticker,
             date=date_str,
@@ -226,8 +256,13 @@ def generate_signal(ticker: str, ohlc: pd.DataFrame, cfg: VolatilityBreakoutConf
             price=price,
             stop_loss=stop_loss,
             reason=reason_str,
+            filtered_strength=strength,
+            raw_strength=raw_str,
             sentiment=sent_str,
-            kelly_fraction=kelly_val
+            kelly_fraction=kelly_val,
+            adx_value=adx_val,
+            volume_ratio=vol_surge_ratio,
+            vol_regime_mult=vr_mult,
         )
         
     return Signal(

@@ -111,6 +111,8 @@ def run_backtest(
         entry_price = 0.0
         stop_loss = 0.0
         shares = 0
+        bars_since_entry = 0
+        entry_atr = 0.0  # ATR at entry for false-breakout detection
         
         for i in range(1, len(df)):
             curr = df.iloc[i]
@@ -148,10 +150,26 @@ def run_backtest(
                         exec_price = current_price * (1.0 + cfg.backtest.slippage)
                         if portfolio.buy(ticker, shares_to_alloc, exec_price, date_str):
                             position = 1
+                            entry_price = exec_price
                             stop_loss = sig.stop_loss
+                            bars_since_entry = 0
+                            entry_atr = float(curr["atr"]) if "atr" in df.columns and pd.notna(curr.get("atr")) else 0.0
             elif position == 1:
+                bars_since_entry += 1
                 shares = portfolio.shares_held(ticker)
-                # Look for exit
+
+                # 0. False-breakout filter — early exit on reversal
+                if (cfg.false_breakout.enabled and
+                    bars_since_entry <= cfg.false_breakout.max_bars and
+                    entry_atr > 0 and entry_price > 0):
+                    reversal_threshold = entry_price - cfg.false_breakout.reversal_atr_mult * entry_atr
+                    if current_price <= reversal_threshold:
+                        exit_price = current_price * (1.0 - cfg.backtest.slippage)
+                        portfolio.sell(ticker, shares, exit_price, date_str)
+                        position = 0
+                        portfolio.record_equity(date_str, {})
+                        continue
+
                 # 1. Stop loss hit
                 if float(curr["Low"]) <= stop_loss:
                     exit_price = min(current_price, stop_loss) * (1.0 - cfg.backtest.slippage)

@@ -10,6 +10,7 @@ from enum import Enum
 from ..config import VolatilityBreakoutConfig
 from ..indicators import ADX, VolatilityRegime
 from .filters import apply_vb_filters
+from trading_core.signal_strength import saturate
 
 try:
     from trading_core.session_context import (
@@ -247,7 +248,7 @@ def generate_signal(ticker: str, ohlc: pd.DataFrame, cfg: VolatilityBreakoutConf
             vr_mult = float(last["vol_regime"]) if float(last["vol_regime"]) > 0 else 1.0
 
         raw_str = vol_component * adx_component * sent_mult * vr_mult * pm_mult * es_scalar
-        strength = min(raw_str, 1.0)
+        strength = saturate(raw_str)
 
         return Signal(
             ticker=ticker,
